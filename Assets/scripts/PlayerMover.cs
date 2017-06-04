@@ -15,6 +15,11 @@ public class PlayerMover : MonoBehaviour
         return moveTimerCurrent > moveTimer && i.SendingMoveInputThisFrame();
     }
 
+    bool CanMove()
+    {
+        return currentDie != null && currentDie.CanMove();
+    }
+
     void Start()
     {
         if (currentDie != null)
@@ -33,7 +38,7 @@ public class PlayerMover : MonoBehaviour
         var i = new PlayerInputs(
             Input.GetAxisRaw("Horizontal"),
             Input.GetAxisRaw("Vertical"));
-        if (MoveInputDetected(i) && currentDie)
+        if (MoveInputDetected(i) && CanMove())
         {
             moveTimerCurrent = 0f;
             currentDie.DoMovement(i.MovementDirection(), moveTimer);

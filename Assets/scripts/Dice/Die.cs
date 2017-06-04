@@ -4,29 +4,43 @@ using UnityEngine;
 
 public class Die : MonoBehaviour
 {
-
     bool selected;
     public bool IsSelected
     {
         get { return selected; }
         set
         {
+            MovesLeft = MaxMoves;
             selected = value;
             if (value)
             {
                 PaintMovementOptions();
             }
+            FocusFaces();
         }
     }
 
+    void Start()
+    {
+        MovesLeft = MaxMoves;
+    }
+    private int MaxMoves = 2;
+    public int MovesLeft;
+
     void OnMouseEnter()
     {
-        PaintMovementOptions();
+        if (!IsSelected)
+        {
+            PaintMovementOptions();
+        }
     }
 
     void OnMouseExit()
     {
-        EraseMovementOptions();
+        if (!IsSelected)
+        {
+            EraseMovementOptions(0f);
+        }
     }
 
     RotationDescription CurrentRotation
@@ -43,9 +57,13 @@ public class Die : MonoBehaviour
         RotateNextFace(moveDir, nextTopFace);
     }
 
+    public bool CanMove()
+    {
+        return IsSelected && MovesLeft > 0;
+    }
+
     public void DoMovement(Direction dir, float moveTime)
     {
-        EraseMovementOptions();
         ArrangeDieFacesOnMovement(dir);
         Vector3 newPos;
         Vector3 rotationDir;
@@ -69,20 +87,47 @@ public class Die : MonoBehaviour
                 break;
         }
         TweenMovement(newPos, rotationDir, moveTime);
+        MovesLeft -= 1;
+        if (MovesLeft == 0)
+        {
+            DeactivateMovement();
+        }
     }
 
-    public void PrintMovementPreview()
-    // deprecated
+    void DeactivateMovement()
     {
-        Debug.Log("Current Rotation is: " + CurrentRotation.ToString());
-        var n = RotationAt(CurrentRotation, Direction.North);
-        Debug.Log("Moving North will produce rotation " + n.ToString());
-        n = RotationAt(CurrentRotation, Direction.East);
-        Debug.Log("Moving East will produce rotation " + n.ToString());
-        n = RotationAt(CurrentRotation, Direction.South);
-        Debug.Log("Moving South will produce rotation " + n.ToString());
-        n = RotationAt(CurrentRotation, Direction.West);
-        Debug.Log("Moving West will produce rotation " + n.ToString());
+        float deactivationTime = 1.5f;
+        EraseMovementOptions(deactivationTime);
+        BlurFaces();
+    }
+
+    List<Transform> GetFaces()
+    {
+        var faces = new List<Transform>();
+        var faceChildren = transform.Find("Faces");
+        for (int i = 0; i < faceChildren.childCount; i++)
+        {
+            faces.Add(faceChildren.GetChild(i));
+        }
+        return faces;
+    }
+
+    void FocusFaces()
+    {
+        var faces = GetFaces();
+        foreach (Transform face in faces)
+        {
+            face.GetComponent<FaceController>().Focus();
+        }
+    }
+
+    void BlurFaces()
+    {
+        var faces = GetFaces();
+        foreach (Transform face in faces)
+        {
+            face.GetComponent<FaceController>().Blur();
+        }
     }
 
     void TweenMovement(Vector3 to, Vector3 rotationDir, float moveTime)
@@ -141,25 +186,25 @@ public class Die : MonoBehaviour
     Transform NearestChildToPoint(Vector3 highpoint)
     {
         Transform highestChild = null;
-        var faces = transform.Find("Faces");
-        for (int i = 0; i < faces.childCount; i++)
+        var faces = GetFaces();
+        foreach (Transform face in faces)
         {
             if (!highestChild)
             {
-                highestChild = faces.GetChild(i);
+                highestChild = face;
             }
             else
             {
                 var thisChildDistance = Vector3.Distance(
                     highpoint,
-                    faces.GetChild(i).position);
+                    face.position);
                 var currentHighestDistance = Vector3.Distance(
                     highpoint,
                     highestChild.transform.position);
                 highestChild =
                     currentHighestDistance < thisChildDistance
                     ? highestChild
-                    : faces.GetChild(i);
+                    : face;
             }
         }
         return highestChild;
@@ -191,10 +236,10 @@ public class Die : MonoBehaviour
     GameObject FaceFromNumeral(int faceNumeral)
     // Given a face numeral, return the Face gameobject bearing that numeral.
     {
-        var faces = transform.Find("Faces");
-        for (int i = 0; i < faces.childCount; i++)
+        var faces = GetFaces();
+        foreach (Transform faceTransform in faces)
         {
-            var face = faces.GetChild(i).GetComponent<FaceController>();
+            var face = faceTransform.GetComponent<FaceController>();
             if (face.FaceNum == faceNumeral)
             {
                 return face.gameObject;
@@ -211,6 +256,9 @@ public class Die : MonoBehaviour
         var westRotation = RotationAt(CurrentRotation, Direction.West);
 
         var paints = new List<PaintPreviewDescription>{
+            // current square
+            new PaintPreviewDescription(CurrentRotation, new Vector3(0f,0f,0f)),
+
             // cardinal directions
             new PaintPreviewDescription(northRotation, new Vector3(0f,1f,0f)),
             new PaintPreviewDescription(eastRotation, new Vector3(1f, 0f, 0f)),
@@ -236,7 +284,7 @@ public class Die : MonoBehaviour
             var topFace = p.Rotation.Top;
             var face = FaceFromNumeral(topFace);
             var go = (GameObject)Instantiate(face, transform.position + p.PaintLocation, Quaternion.identity);
-            go.transform.SetParent(transform.Find("RotationGuides"));
+            go.transform.SetParent(GameObject.Find("RotationGuides").transform);
             go.transform.localScale = go.transform.localScale * p.TransformScalar;
 
             var spr = go.GetComponent<SpriteRenderer>();
@@ -244,17 +292,13 @@ public class Die : MonoBehaviour
         }
     }
 
-    public void EraseMovementOptions()
+    public void EraseMovementOptions(float time)
     {
-        var toDelete = new List<GameObject>();
-        var faces = transform.Find("RotationGuides");
-        for (int i = 0; i < faces.childCount; i++)
+        var faceChildren = GameObject.Find("RotationGuides").transform;
+        for (int i = 0; i < faceChildren.childCount; i++)
         {
-            toDelete.Add(faces.GetChild(i).gameObject);
-        }
-        foreach (GameObject g in toDelete)
-        {
-            Destroy(g);
+            var child = faceChildren.GetChild(i);
+            child.GetComponent<FaceController>().DeleteGuide(time);
         }
     }
 }
